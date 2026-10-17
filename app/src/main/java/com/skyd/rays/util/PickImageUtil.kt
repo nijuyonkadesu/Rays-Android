@@ -48,67 +48,71 @@ fun rememberImagePicker(
         )
 
         else -> if (multiple) rememberLauncherForActivityResult(
-            ActivityResultContracts.GetMultipleContents(),
+            GetStickerContents(),
             onResult = onResult,
         ) else rememberLauncherForActivityResult(
-            ActivityResultContracts.GetContent(),
+            GetStickerContent(),
             onResult = { onResult(listOf(it)) },
         )
     }
 }
 
 @Suppress("UNCHECKED_CAST")
-fun ManagedActivityResultLauncher<*, *>.launchImagePicker() {
+fun ManagedActivityResultLauncher<*, *>.launchImagePicker(includeVideos: Boolean = false) {
+    val mediaType = if (includeVideos) ActivityResultContracts.PickVisualMedia.ImageAndVideo
+        else ActivityResultContracts.PickVisualMedia.ImageOnly
+    val mimeTypes = if (includeVideos) arrayOf("image/*", "video/mp4", "video/webm") else arrayOf("image/*")
     when (contract) {
         is ActivityResultContracts.PickMultipleVisualMedia -> {
             (this as ManagedActivityResultLauncher<PickVisualMediaRequest, List<@JvmSuppressWildcards Uri>>)
-                .safeLaunch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                .safeLaunch(PickVisualMediaRequest(mediaType))
         }
 
         is ActivityResultContracts.PickVisualMedia -> {
             (this as ManagedActivityResultLauncher<PickVisualMediaRequest, Uri?>)
-                .safeLaunch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                .safeLaunch(PickVisualMediaRequest(mediaType))
         }
 
         is PickMultipleFromGallery -> {
-            (this as ManagedActivityResultLauncher<Unit?, List<Uri>>)
-                .safeLaunch(null)
+            (this as ManagedActivityResultLauncher<Boolean?, List<Uri>>)
+                .safeLaunch(includeVideos)
         }
 
         is PickFromGallery -> {
-            (this as ManagedActivityResultLauncher<Unit?, Uri?>)
-                .safeLaunch(null)
+            (this as ManagedActivityResultLauncher<Boolean?, Uri?>)
+                .safeLaunch(includeVideos)
         }
 
         is ActivityResultContracts.OpenMultipleDocuments -> {
             (this as ManagedActivityResultLauncher<Array<String>, List<@JvmSuppressWildcards Uri>>)
-                .safeLaunch(arrayOf("image/*"))
+                .safeLaunch(mimeTypes)
         }
 
         is ActivityResultContracts.OpenDocument -> {
             (this as ManagedActivityResultLauncher<Array<String>, Uri?>)
-                .safeLaunch(arrayOf("image/*"))
+                .safeLaunch(mimeTypes)
         }
 
         is ActivityResultContracts.GetMultipleContents -> {
             (this as ManagedActivityResultLauncher<String, List<@JvmSuppressWildcards Uri>>)
-                .safeLaunch("image/*")
+                .safeLaunch(if (includeVideos) "*/*" else "image/*")
         }
 
         is ActivityResultContracts.GetContent -> {
             (this as ManagedActivityResultLauncher<String, Uri?>)
-                .safeLaunch("image/*")
+                .safeLaunch(if (includeVideos) "*/*" else "image/*")
         }
 
         else -> error("Unknown contract type!")
     }
 }
 
-class PickFromGallery : ActivityResultContract<Unit?, Uri?>() {
-    override fun createIntent(context: Context, input: Unit?): Intent {
+class PickFromGallery : ActivityResultContract<Boolean?, Uri?>() {
+    override fun createIntent(context: Context, input: Boolean?): Intent {
         return Intent.createChooser(
             Intent(Intent.ACTION_PICK)
-                .setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*"),
+                .setDataAndType((if (input == true) MediaStore.Files.getContentUri("external") else MediaStore.Images.Media.EXTERNAL_CONTENT_URI), if (input == true) "*/*" else "image/*")
+                .putExtra(Intent.EXTRA_MIME_TYPES, if (input == true) arrayOf("image/*", "video/mp4", "video/webm") else arrayOf("image/*")),
             appContext.getString(R.string.use_the_following_to_open)
         )
     }
@@ -118,11 +122,12 @@ class PickFromGallery : ActivityResultContract<Unit?, Uri?>() {
     }
 }
 
-class PickMultipleFromGallery : ActivityResultContract<Unit?, List<Uri>>() {
-    override fun createIntent(context: Context, input: Unit?): Intent {
+class PickMultipleFromGallery : ActivityResultContract<Boolean?, List<Uri>>() {
+    override fun createIntent(context: Context, input: Boolean?): Intent {
         return Intent.createChooser(
             Intent(Intent.ACTION_PICK)
-                .setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*")
+                .setDataAndType((if (input == true) MediaStore.Files.getContentUri("external") else MediaStore.Images.Media.EXTERNAL_CONTENT_URI), if (input == true) "*/*" else "image/*")
+                .putExtra(Intent.EXTRA_MIME_TYPES, if (input == true) arrayOf("image/*", "video/mp4", "video/webm") else arrayOf("image/*"))
                 .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true),
             appContext.getString(R.string.use_the_following_to_open)
         )
@@ -152,4 +157,16 @@ internal fun Intent.getClipDataUris(): List<Uri> {
         }
     }
     return ArrayList(resultSet)
+}
+
+private class GetStickerContent : ActivityResultContracts.GetContent() {
+    override fun createIntent(context: Context, input: String): Intent = super.createIntent(context, input).apply {
+        if (input == "*/*") putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/mp4", "video/webm"))
+    }
+}
+
+private class GetStickerContents : ActivityResultContracts.GetMultipleContents() {
+    override fun createIntent(context: Context, input: String): Intent = super.createIntent(context, input).apply {
+        if (input == "*/*") putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/mp4", "video/webm"))
+    }
 }

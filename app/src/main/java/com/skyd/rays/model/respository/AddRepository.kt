@@ -15,20 +15,21 @@ import com.skyd.rays.appContext
 import com.skyd.rays.base.BaseRepository
 import com.skyd.rays.config.CLASSIFICATION_MODEL_DIR_FILE
 import com.skyd.rays.config.STICKER_DIR
+import com.skyd.rays.di.get
 import com.skyd.rays.ext.catchMap
 import com.skyd.rays.ext.copyTo
 import com.skyd.rays.ext.dataStore
 import com.skyd.rays.ext.getOrDefault
 import com.skyd.rays.ext.md5
 import com.skyd.rays.model.bean.StickerWithTags
+import com.skyd.rays.model.db.dao.sticker.MimeTypeDao
 import com.skyd.rays.model.db.dao.sticker.StickerDao
 import com.skyd.rays.model.preference.StickerClassificationModelPreference
 import com.skyd.rays.model.preference.ai.ClassificationThresholdPreference
 import com.skyd.rays.model.preference.ai.TextRecognizeThresholdPreference
 import com.skyd.rays.model.preference.ai.UseClassificationInAddPreference
 import com.skyd.rays.model.preference.ai.UseTextRecognizeInAddPreference
-import com.skyd.rays.util.image.ImageFormatChecker
-import com.skyd.rays.util.image.format.ImageFormat
+import com.skyd.rays.util.media.StickerFormatChecker
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -55,13 +56,8 @@ class AddRepository(
         stickerWithTags: StickerWithTags,
         uri: Uri
     ): Flow<Any> = flow {
-        var imageFormat: ImageFormat
-        appContext.contentResolver.openInputStream(uri)!!.use {
-            imageFormat = ImageFormatChecker.check(it)
-            check(imageFormat != ImageFormat.UNDEFINED) {
-                "Unsupported image format"
-            }
-        }
+        val mimeType = StickerFormatChecker.check(uri)
+        check(mimeType != null) { "Unsupported sticker format" }
 
         val tempFile = File(appContext.STICKER_DIR, "${Random.nextLong()}")
         uri.copyTo(tempFile)
@@ -81,7 +77,7 @@ class AddRepository(
             if (!tempFile.renameTo(File(appContext.STICKER_DIR, uuid))) {
                 tempFile.deleteRecursively()
             }
-            ImageFormatChecker.saveMimeType(format = imageFormat, stickerUuid = uuid)
+            get<MimeTypeDao>().setMimeType(stickerUuid = uuid, mimeType = mimeType)
             emit(uuid)
         }
     }.flowOn(Dispatchers.IO)
@@ -92,6 +88,10 @@ class AddRepository(
     }.flowOn(Dispatchers.IO)
 
     fun requestSuggestTags(sticker: Uri): Flow<Set<String>> = flow {
+        if (StickerFormatChecker.isVideo(sticker)) {
+            emit(emptySet())
+            return@flow
+        }
         val image: InputImage = InputImage.fromFilePath(appContext, sticker)
         val dataStore = appContext.dataStore
         val useTextRecognizeInAdd = dataStore.getOrDefault(UseTextRecognizeInAddPreference)

@@ -25,6 +25,7 @@ import com.skyd.rays.ext.getOrDefault
 import com.skyd.rays.model.preference.privacy.BlurStickerRadiusPreference
 import com.skyd.rays.ui.local.LocalBlurStickerRadius
 import com.skyd.rays.util.coil.BlurTransformation
+import com.skyd.rays.util.coil.StickerVideoDecoder
 import com.skyd.rays.util.coil.apng.AnimatedPngDecoder
 import java.io.File
 
@@ -103,6 +104,7 @@ fun rememberRaysImageLoader(
                     add(GifDecoder.Factory())
                 }
                 add(SvgDecoder.Factory())
+                add(StickerVideoDecoder())
             }
             .run { if (listener != null) eventListener(listener) else this }
             .build()

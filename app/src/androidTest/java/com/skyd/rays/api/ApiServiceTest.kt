@@ -8,8 +8,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.net.Uri
-import androidx.core.content.FileProvider
 import android.os.IBinder
+import androidx.core.content.FileProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import com.skyd.rays.appContext
 import com.skyd.rays.di.get
@@ -18,14 +18,13 @@ import com.skyd.rays.ext.getOrDefault
 import com.skyd.rays.ext.put
 import com.skyd.rays.model.bean.ApiGrantPackageBean
 import com.skyd.rays.model.bean.StickerBean
-import com.skyd.rays.model.bean.TagBean
 import com.skyd.rays.model.bean.StickerWithTags
+import com.skyd.rays.model.bean.TagBean
 import com.skyd.rays.model.db.AppDatabase
 import com.skyd.rays.model.preference.ApiGrantPreference
 import com.skyd.rays.model.respository.AddRepository
-import kotlinx.coroutines.flow.first
-import java.io.File
 import com.skyd.rays.util.stickerUuidToFile
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -35,6 +34,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -65,6 +65,8 @@ class ApiServiceTest {
                 63 -> "api-animated.webp"
                 62 -> "api-static.webp"
                 61 -> "api-fixture.svg"
+                60 -> "api-fixture.mp4"
+                59 -> "api-fixture.webm"
                 else -> null
             }
             if (asset != null) {

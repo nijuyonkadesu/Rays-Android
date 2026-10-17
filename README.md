@@ -53,7 +53,8 @@
 9. Support importing some stickers through the **system "Share" page**
 10. Support **Monet theming and customizing theme colors**, support **theme color following the sticker's main color**
 11. Support **dark color mode**
-12. ......
+12. Support MP4/WebM video stickers with thumbnails, titles/tags and original-file sharing
+13. ......
 
 External app integration: [API documentation](docs/external-api.md).
 

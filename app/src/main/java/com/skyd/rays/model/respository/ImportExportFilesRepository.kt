@@ -1,6 +1,7 @@
 package com.skyd.rays.model.respository
 
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import com.skyd.rays.R
 import com.skyd.rays.appContext
@@ -17,8 +18,7 @@ import com.skyd.rays.model.bean.StickerWithTags
 import com.skyd.rays.model.bean.StickerWithTagsAndFile
 import com.skyd.rays.model.db.dao.sticker.HandleImportedStickerStrategy
 import com.skyd.rays.model.db.dao.sticker.StickerDao
-import com.skyd.rays.util.image.ImageFormatChecker
-import com.skyd.rays.util.image.format.ImageFormat
+import com.skyd.rays.util.media.StickerFormatChecker
 import com.skyd.rays.util.stickerUuidToFile
 import com.skyd.rays.util.unzip
 import com.skyd.rays.util.zip
@@ -271,18 +271,16 @@ class ImportExportFilesRepository(
             // Check MD5
             check(imageFile.md5() == stickerWithTags.sticker.stickerMd5)
             // Check sticker's format
-            imageFile.inputStream().use { inputStream ->
-                check(ImageFormatChecker.check(inputStream, stickerUuid) != ImageFormat.UNDEFINED) {
-                    appContext.getString(
-                        R.string.import_export_files_repo_invalid_format,
-                        "Unsupported sticker format, sticker file name: '${stickersListFiles[index].name}'"
-                    )
-                }
-                stickerWithTagsAndFileList += StickerWithTagsAndFile(
-                    stickerWithTags = stickerWithTags,
-                    stickerFile = stickersListFiles[index]
+            check(StickerFormatChecker.check(imageFile.toUri(), stickerUuid) != null) {
+                appContext.getString(
+                    R.string.import_export_files_repo_invalid_format,
+                    "Unsupported sticker format, sticker file name: '${stickersListFiles[index].name}'"
                 )
             }
+            stickerWithTagsAndFileList += StickerWithTagsAndFile(
+                stickerWithTags = stickerWithTags,
+                stickerFile = stickersListFiles[index]
+            )
         }
 
         return stickerWithTagsAndFileList

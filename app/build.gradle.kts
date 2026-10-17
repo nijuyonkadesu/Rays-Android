@@ -185,6 +185,7 @@ dependencies {
     implementation(libs.lottie.compose)
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
+    implementation(libs.coil.video)
     implementation(libs.coil.svg)
     implementation(libs.telephoto.subsamplingimage)
 

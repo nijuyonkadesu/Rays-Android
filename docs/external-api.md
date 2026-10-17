@@ -33,7 +33,7 @@ val response = withContext(Dispatchers.IO) {
 
 `keyword` follows Rays' existing title/tag search preferences, including whitespace
 and regex settings. Unicode and emoji are passed through unchanged. Results are
-ordered by creation time descending, then UUID descending for equal timestamps.
+ordered by creation time descending, then UUID ascending for equal timestamps.
 Each database query reads at most the requested page plus one lookahead item.
 
 The response is JSON with `startIndex`, returned `size`, `data` and optional
@@ -78,3 +78,16 @@ also exercise page-scoped URI grants, playback files and worker-based WebM conve
 For Rays' existing ML-backed Add screen on an emulator advertising `arm64-v8a`,
 install the ARM64 split with `adb install --abi arm64-v8a <apk>` to use the emulator's
 available native translation. This integration does not remove or change ML dependencies.
+
+## Model assets in source builds
+
+Upstream CI injects additional model assets from a private repository. A plain
+source checkout does not contain the default classification model or the
+`mobilenet_v3_small.tflite` similarity model. ML dependencies alone do not supply
+these files. The author publishes a classification model at
+https://github.com/SkyD666/StickerClassification/releases/tag/v1.1; import and select
+it through **Settings → AI → Sticker classification → Classification model**.
+Classification/OCR run on the Add screen and produce suggestions that the user
+must accept before saving. Missing classification assets can suppress the combined
+suggestion result, including OCR; disabling classification while leaving text
+recognition enabled allows an OCR-only workflow.

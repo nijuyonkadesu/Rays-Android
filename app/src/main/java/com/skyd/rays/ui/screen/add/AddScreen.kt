@@ -270,10 +270,10 @@ fun AddScreen(
                     WaitingRow(
                         uris = uiState.waitingList,
                         isEdit = isEdit,
-                        onSelectStickersClick = { pickStickersLauncher.launchImagePicker() },
+                        onSelectStickersClick = { pickStickersLauncher.launchImagePicker(includeVideos = true) },
                         onReplaceStickerClick = { index ->
                             currentReplaceIndex = index
-                            replaceStickerLauncher.launchImagePicker()
+                            replaceStickerLauncher.launchImagePicker(includeVideos = true)
                         },
                         onRemoveStickerFromWaitingListClick = { index ->
                             dispatch(

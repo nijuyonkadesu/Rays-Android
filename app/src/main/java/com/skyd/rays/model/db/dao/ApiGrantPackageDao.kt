@@ -19,10 +19,10 @@ interface ApiGrantPackageDao {
     suspend fun getAllPackage(): List<ApiGrantPackageBean>
 
     @Transaction
-    @Query("DELETE FROM $API_GRANT_PACKAGE_TABLE_NAME WHERE ${ApiGrantPackageBean.PACKAGE_NAME_COLUMN} LIKE :pkgName")
+    @Query("DELETE FROM $API_GRANT_PACKAGE_TABLE_NAME WHERE ${ApiGrantPackageBean.PACKAGE_NAME_COLUMN} = :pkgName")
     suspend fun deletePackage(pkgName: String): Int
 
     @Transaction
-    @Query("SELECT ${ApiGrantPackageBean.ENABLED_COLUMN} FROM $API_GRANT_PACKAGE_TABLE_NAME WHERE ${ApiGrantPackageBean.PACKAGE_NAME_COLUMN} LIKE :pkgName")
+    @Query("SELECT ${ApiGrantPackageBean.ENABLED_COLUMN} FROM $API_GRANT_PACKAGE_TABLE_NAME WHERE ${ApiGrantPackageBean.PACKAGE_NAME_COLUMN} = :pkgName")
     suspend fun packageEnable(pkgName: String): Boolean
 }

@@ -185,6 +185,7 @@ dependencies {
     implementation(libs.lottie.compose)
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
+    implementation(libs.coil.video)
     implementation(libs.coil.svg)
     implementation(libs.telephoto.subsamplingimage)
 
@@ -212,4 +213,6 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.ui.test.manifest)
 
     testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
 }

@@ -225,10 +225,12 @@ class MainActivity : BaseComposeActivity() {
                 )
             }
             composable<AddDeepLinkRoute>(
-                deepLinks = listOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE).map {
-                    navDeepLink {
-                        action = it
-                        mimeType = "image/*"
+                deepLinks = listOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE).flatMap { action ->
+                    listOf("image/*", "video/mp4", "video/webm").map { type ->
+                        navDeepLink {
+                            this.action = action
+                            mimeType = type
+                        }
                     }
                 },
             ) {
@@ -304,7 +306,7 @@ class MainActivity : BaseComposeActivity() {
         val stickers: MutableList<UriWithStickerUuidBean> = when (intent?.action) {
             Intent.ACTION_SEND -> {
                 val data = mutableListOf<UriWithStickerUuidBean>()
-                if (intent.type?.startsWith("image/") == true) {
+                if (intent.type?.startsWith("image/") == true || intent.type in setOf("video/mp4", "video/webm")) {
                     val uri = IntentCompat.getParcelableExtra(
                         intent, Intent.EXTRA_STREAM, Uri::class.java,
                     )
@@ -317,7 +319,7 @@ class MainActivity : BaseComposeActivity() {
 
             Intent.ACTION_SEND_MULTIPLE -> {
                 val data = mutableListOf<UriWithStickerUuidBean>()
-                if (intent.type?.startsWith("image/") == true) {
+                if (intent.type?.startsWith("image/") == true || intent.type in setOf("video/mp4", "video/webm")) {
                     val uris = IntentCompat.getParcelableArrayListExtra(
                         intent, Intent.EXTRA_STREAM, Uri::class.java,
                     )?.map { UriWithStickerUuidBean(uri = it) }

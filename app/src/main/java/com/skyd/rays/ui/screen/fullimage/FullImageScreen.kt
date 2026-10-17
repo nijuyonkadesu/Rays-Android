@@ -16,6 +16,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -24,6 +25,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.skyd.compone.component.ComponeTopBar
 import com.skyd.rays.model.serializer.UriSerializer
+import com.skyd.rays.ui.component.StickerVideo
+import com.skyd.rays.util.media.StickerFormatChecker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import me.saket.telephoto.subsamplingimage.SubSamplingImage
 import me.saket.telephoto.subsamplingimage.SubSamplingImageSource
@@ -65,6 +70,7 @@ fun FullImageScreen(image: Uri) {
                     title = { },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Black.copy(alpha = 0.4f),
+                        navigationIconContentColor = Color.White,
                     ),
                 )
             }
@@ -75,18 +81,27 @@ fun FullImageScreen(image: Uri) {
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
         ) {
-            val zoomableState = rememberZoomableState(zoomSpec = ZoomSpec(maxZoomFactor = 4f))
-            val imageState = rememberSubSamplingImageState(
-                zoomableState = zoomableState,
-                imageSource = SubSamplingImageSource.contentUri(image),
-            )
-            SubSamplingImage(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .zoomable(zoomableState, onClick = { showWidget = !showWidget }),
-                state = imageState,
-                contentDescription = null,
-            )
+            val isVideo by produceState<Boolean?>(null, image) {
+                value = withContext(Dispatchers.IO) {
+                    StickerFormatChecker.isVideo(image, image.lastPathSegment)
+                }
+            }
+            if (isVideo == true) {
+                StickerVideo(uri = image, modifier = Modifier.fillMaxSize())
+            } else if (isVideo == false) {
+                val zoomableState = rememberZoomableState(zoomSpec = ZoomSpec(maxZoomFactor = 4f))
+                val imageState = rememberSubSamplingImageState(
+                    zoomableState = zoomableState,
+                    imageSource = SubSamplingImageSource.contentUri(image),
+                )
+                SubSamplingImage(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zoomable(zoomableState, onClick = { showWidget = !showWidget }),
+                    state = imageState,
+                    contentDescription = null,
+                )
+            }
         }
     }
 }

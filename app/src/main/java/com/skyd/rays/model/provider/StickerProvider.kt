@@ -6,6 +6,8 @@ import android.database.MatrixCursor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Point
+import android.media.MediaMetadataRetriever
+import android.os.Build
 import android.os.CancellationSignal
 import android.os.Handler
 import android.os.ParcelFileDescriptor
@@ -14,6 +16,7 @@ import android.provider.DocumentsContract.Document.MIME_TYPE_DIR
 import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
 import android.util.Log
+import androidx.core.net.toUri
 import com.skyd.rays.R
 import com.skyd.rays.config.PROVIDER_THUMBNAIL_DIR
 import com.skyd.rays.config.STICKER_DIR
@@ -23,8 +26,7 @@ import com.skyd.rays.model.db.dao.TagDao
 import com.skyd.rays.model.db.dao.sticker.MimeTypeDao
 import com.skyd.rays.model.db.dao.sticker.StickerDao
 import com.skyd.rays.model.respository.SearchRepository
-import com.skyd.rays.util.image.ImageFormatChecker
-import com.skyd.rays.util.image.format.ImageFormat
+import com.skyd.rays.util.media.StickerFormatChecker
 import kotlinx.coroutines.runBlocking
 import org.koin.android.ext.android.get
 import java.io.File
@@ -68,7 +70,7 @@ class StickerProvider : DocumentsProvider() {
 
             // The child MIME types are used to filter the roots and only present to the
             // user those roots that contain the desired type somewhere in their file hierarchy.
-            add(Root.COLUMN_MIME_TYPES, "image/*")
+            add(Root.COLUMN_MIME_TYPES, "image/*\nvideo/mp4\nvideo/webm")
             add(Root.COLUMN_ICON, R.mipmap.ic_launcher)
         }
 
@@ -174,7 +176,7 @@ class StickerProvider : DocumentsProvider() {
         val stickerUuid = file.name
         if (file.isFile) {
             val mimeType = mimeTypeMap.getOrElse(stickerUuid) {
-                ImageFormatChecker.check(FileInputStream(file), stickerUuid).toMimeType().apply {
+                (StickerFormatChecker.check(file.toUri(), stickerUuid) ?: "application/octet-stream").apply {
                     mimeTypeMap[stickerUuid] = this
                 }
             }
@@ -186,7 +188,7 @@ class StickerProvider : DocumentsProvider() {
                         file.lastModified().toDateTimeString(
                             dateStyle = SimpleDateFormat.SHORT,
                             timeStyle = SimpleDateFormat.SHORT,
-                        ) + ImageFormat.fromMimeType(mimeType)
+                        ) + StickerFormatChecker.extension(mimeType)
             )
         } else if (file.isDirectory) {
             row.add(Document.COLUMN_MIME_TYPE, MIME_TYPE_DIR)
@@ -243,39 +245,60 @@ class StickerProvider : DocumentsProvider() {
         val thumbFile = File(context!!.PROVIDER_THUMBNAIL_DIR, stickerFile.name)
         if (!thumbFile.exists()) {
             thumbFile.parentFile?.mkdirs()
-            thumbFile.createNewFile()
-            FileOutputStream(thumbFile).use { fos ->
-                BitmapFactory.Options().apply {
-                    inJustDecodeBounds = true
-                    BitmapFactory.decodeFile(stickerFile.path, this)
-                    // thumbnail images should not
-                    // more than double the size specified by the sizeHint
-                    val preHeight = outHeight / 2
-                    val preWidth = outWidth / 2
-                    inSampleSize = 1
-                    while (preHeight / inSampleSize >= sizeHint.y ||
-                        preWidth / inSampleSize >= sizeHint.x
-                    ) {
-                        inSampleSize = inSampleSize shl 1
-                    }
-                    inJustDecodeBounds = false
-                    // Only mutable bitmap can be reused.
-                    inMutable = true
-                    val oldBitmap = reuseBitmap?.get()
-                    if (oldBitmap != null) {
-                        if (oldBitmap.width >= outWidth / inSampleSize &&
-                            oldBitmap.height >= outHeight / inSampleSize
+            if (StickerFormatChecker.isVideo(stickerFile.toUri(), stickerFile.name)) {
+                signal?.throwIfCanceled()
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(stickerFile.path)
+                    val bitmap = if (Build.VERSION.SDK_INT >= 27) retriever.getScaledFrameAtTime(
+                        0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                        sizeHint.x.coerceIn(1, 1024), sizeHint.y.coerceIn(1, 1024),
+                    ) else retriever.getFrameAtTime(0)
+                    checkNotNull(bitmap) { "Video thumbnail is unavailable" }
+                    try {
+                        signal?.throwIfCanceled()
+                        val pending = File.createTempFile(stickerFile.name, ".pending", thumbFile.parentFile)
+                        try {
+                            FileOutputStream(pending).use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 90, it)) }
+                            check(pending.renameTo(thumbFile))
+                        } finally { pending.delete() }
+                    } finally { bitmap.recycle() }
+                } finally { retriever.release() }
+            } else {
+                thumbFile.createNewFile()
+                FileOutputStream(thumbFile).use { fos ->
+                    BitmapFactory.Options().apply {
+                        inJustDecodeBounds = true
+                        BitmapFactory.decodeFile(stickerFile.path, this)
+                        // thumbnail images should not
+                        // more than double the size specified by the sizeHint
+                        val preHeight = outHeight / 2
+                        val preWidth = outWidth / 2
+                        inSampleSize = 1
+                        while (preHeight / inSampleSize >= sizeHint.y ||
+                            preWidth / inSampleSize >= sizeHint.x
                         ) {
-                            inBitmap = reuseBitmap?.get()
+                            inSampleSize = inSampleSize shl 1
                         }
-                    }
-                    val bitmap = BitmapFactory.decodeFile(stickerFile.path, this) ?: inBitmap
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 90, fos)
+                        inJustDecodeBounds = false
+                        // Only mutable bitmap can be reused.
+                        inMutable = true
+                        val oldBitmap = reuseBitmap?.get()
+                        if (oldBitmap != null) {
+                            if (oldBitmap.width >= outWidth / inSampleSize &&
+                                oldBitmap.height >= outHeight / inSampleSize
+                            ) {
+                                inBitmap = reuseBitmap?.get()
+                            }
+                        }
+                        val bitmap = BitmapFactory.decodeFile(stickerFile.path, this) ?: inBitmap
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 90, fos)
 
-                    reuseBitmap.let { reuseBitmap ->
-                        if (reuseBitmap?.get() != bitmap) {
-                            reuseBitmap?.clear()
-                            this@StickerProvider.reuseBitmap = WeakReference(bitmap)
+                        reuseBitmap.let { reuseBitmap ->
+                            if (reuseBitmap?.get() != bitmap) {
+                                reuseBitmap?.clear()
+                                this@StickerProvider.reuseBitmap = WeakReference(bitmap)
+                            }
                         }
                     }
                 }

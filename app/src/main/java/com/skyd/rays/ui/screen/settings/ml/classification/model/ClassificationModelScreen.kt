@@ -177,32 +177,33 @@ private fun ModelList(
                     onClick = { pickModelLauncher.safeLaunch("application/octet-stream") }
                 )
             }
-            items(count = models.size, isBaseItem = { true }) { index ->
-                val item = models[index]
-                RaysSwipeToDismiss(
-                    state = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { dismissValue ->
-                            if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
-                                onDelete(item)
+            models.forEach { model ->
+                item {
+                    RaysSwipeToDismiss(
+                        state = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { dismissValue ->
+                                if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+                                    onDelete(model)
+                                }
+                                false
                             }
-                            false
-                        }
-                    ),
-                    enableDismissFromStartToEnd = false,
-                    enableDismissFromEndToStart = true,
-                ) {
-                    RadioSettingsItem(
-                        modifier = Modifier.background(MaterialTheme.colorScheme.background),
-                        selected = item.name == classificationModelName,
-                        painter = rememberVectorPainter(image = Icons.Outlined.Lightbulb),
-                        text = item.name,
-                        description = item.path,
-                        onClick = {
-                            if (item.name != classificationModelName) {
-                                onSetModel(item)
+                        ),
+                        enableDismissFromStartToEnd = false,
+                        enableDismissFromEndToStart = true,
+                    ) {
+                        RadioSettingsItem(
+                            modifier = Modifier.background(MaterialTheme.colorScheme.background),
+                            selected = model.name == classificationModelName,
+                            painter = rememberVectorPainter(image = Icons.Outlined.Lightbulb),
+                            text = model.name,
+                            description = model.path,
+                            onClick = {
+                                if (model.name != classificationModelName) {
+                                    onSetModel(model)
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }

@@ -12,6 +12,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import com.skyd.rays.appContext
 import com.skyd.rays.config.STICKER_DIR
@@ -24,7 +25,7 @@ import com.skyd.rays.model.preference.share.CopyStickerToClipboardWhenSharingPre
 import com.skyd.rays.model.preference.share.StickerExtNamePreference
 import com.skyd.rays.model.preference.share.UriStringSharePreference
 import com.skyd.rays.ui.service.RaysAccessibilityService
-import com.skyd.rays.util.image.ImageFormatChecker
+import com.skyd.rays.util.media.StickerFormatChecker
 import com.skyd.rays.util.share.ShareUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -129,14 +130,12 @@ fun Context.sendStickersByFiles(
             }
         }
 
-        var mimetype: String? = null    // null considered as image/*
-        // Set mimetype only when there is only one sticker
-        if (contentUris.size == 1) {
-            val firstUri = contentUris.first()
-            contentResolver.openInputStream(firstUri)?.use { inputStream ->
-                mimetype =
-                    ImageFormatChecker.check(inputStream, firstUri.lastPathSegment).toMimeType()
-            }
+        val mimeTypes = contentUris.mapNotNull { StickerFormatChecker.check(it, it.lastPathSegment) }
+        val mimetype = when {
+            mimeTypes.distinct().size == 1 -> mimeTypes.first()
+            mimeTypes.all { it.startsWith("image/") } -> "image/*"
+            mimeTypes.all { it.startsWith("video/") } -> "video/*"
+            else -> "*/*"
         }
         withContext(Dispatchers.Main) {
             ShareUtil.share(
@@ -200,7 +199,7 @@ fun File.copyStickerToTempFolder(fileExtension: Boolean = true): File {
     val outputDir = appContext.TEMP_STICKER_DIR
     check(outputDir.exists() || outputDir.mkdirs())
     val resultFileName = name + "_" + Random.nextInt(0, Int.MAX_VALUE) + if (fileExtension) {
-        inputStream().use { ImageFormatChecker.check(it, name).toString() }
+        StickerFormatChecker.check(toUri(), name)?.let(StickerFormatChecker::extension).orEmpty()
     } else ""
     val resultFile = copyTo(
         target = File(outputDir, resultFileName),
@@ -236,19 +235,19 @@ fun stickerUuidToUri(uuid: String): Uri = Uri.fromFile(stickerUuidToFile(uuid))
 
 fun exportSticker(uuid: String, outputDir: Uri) {
     val originFile = stickerUuidToFile(uuid)
-    val extensionName = originFile.inputStream().use { inputStream ->
-        ImageFormatChecker.check(inputStream, uuid).toString()
-    }
+    val mimeType = StickerFormatChecker.check(originFile.toUri(), uuid)
+        ?: throw IOException("Unsupported sticker format")
+    val extensionName = StickerFormatChecker.extension(mimeType)
     val resultFileName = uuid + "_" + Random.nextInt(0, Int.MAX_VALUE) + extensionName
 
     val documentFile = DocumentFile.fromTreeUri(appContext, outputDir)!!
     val stickerUri: Uri = documentFile.createFile(
-        "image/*",
+        mimeType,
         uuid
     )?.apply { renameTo(resultFileName) }?.uri!!
     val stickerOutputStream = appContext.contentResolver.openOutputStream(stickerUri)!!
     stickerOutputStream.use { outputStream ->
-        originFile.inputStream().copyTo(outputStream)
+        originFile.inputStream().use { it.copyTo(outputStream) }
     }
 }
 
@@ -258,24 +257,26 @@ fun exportSticker(uuid: String, outputDir: Uri) {
 fun exportStickerToPictures(uri: Uri) {
     val contentResolver = appContext.contentResolver
 
-    val extensionName = contentResolver.openInputStream(uri)?.use { inputStream ->
-        ImageFormatChecker.check(inputStream, uri.lastPathSegment).toString()
-    } ?: throw IOException("Can not open sticker file")
+    val mimeType = StickerFormatChecker.check(uri, uri.lastPathSegment)
+        ?: throw IOException("Unsupported sticker format")
+    val extensionName = StickerFormatChecker.extension(mimeType)
+    val video = mimeType in StickerFormatChecker.videoMimeTypes
     val filename = uri.lastPathSegment + "_" + Random.nextInt(0, Int.MAX_VALUE) + extensionName
 
     var outputStream: OutputStream
     var imageUri: Uri?
     val contentValues = ContentValues().apply {
         put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-        put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
+        put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Rays")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, (if (video) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES) + "/Rays")
             put(MediaStore.Images.Media.IS_PENDING, 1)
         }
     }
 
     contentResolver.also { resolver ->
-        imageUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+        imageUri = resolver.insert(if (video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            else MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
         outputStream = imageUri?.let { resolver.openOutputStream(it) }
             ?: throw IOException("Can not write file")
         resolver.openInputStream(uri)?.use { inputStream -> inputStream.copyTo(outputStream) }
@@ -324,9 +325,7 @@ suspend fun Context.copyStickerToClipboard(vararg uris: Uri) {
     val contentResolver = appContext.contentResolver
     withContext(Dispatchers.IO) {
         uris.forEach { uri ->
-            contentResolver.openInputStream(uri)?.use { inputStream ->
-                mimetypes += ImageFormatChecker.check(inputStream, uri.lastPathSegment).toMimeType()
-            }
+            StickerFormatChecker.check(uri, uri.lastPathSegment)?.let { mimetypes += it }
         }
     }
     clipboard.setPrimaryClip(

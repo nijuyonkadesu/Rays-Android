@@ -8,6 +8,9 @@ kotlin = "2.1.21"
 koin = "4.0.4"
 
 [libraries]
+coil-video = { module = "io.coil-kt.coil3:coil-video", version.ref = "coil" }
+androidx-test-runner = { module = "androidx.test:runner", version = "1.6.2" }
+androidx-test-junit = { module = "androidx.test.ext:junit", version = "1.2.1" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version = "1.10.1" }
 androidx-compose-ui-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest", version.ref = "composeMaterial" }
 androidx-compose-ui-ui-tooling3 = { module = "androidx.compose.ui:ui-tooling", version.ref = "composeMaterial" }

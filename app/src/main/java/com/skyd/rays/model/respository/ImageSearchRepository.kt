@@ -13,6 +13,7 @@ import com.skyd.rays.ext.toBitmap
 import com.skyd.rays.model.db.dao.sticker.StickerDao
 import com.skyd.rays.model.db.objectbox.entity.StickerEmbedding
 import com.skyd.rays.model.db.objectbox.entity.StickerEmbedding_
+import com.skyd.rays.util.media.StickerFormatChecker
 import com.skyd.rays.util.stickerUuidToUri
 import io.objectbox.BoxStore
 import io.objectbox.kotlin.boxFor
@@ -58,7 +59,7 @@ class ImageSearchRepository(
     private val nearestNeighborsResultFlow = MutableStateFlow<Map<String, Double>>(emptyMap())
     val stickerWithTagsResultList = nearestNeighborsResultFlow.flatMapLatest { uuids ->
         if (uuids.isEmpty()) {
-            return@flatMapLatest flowOf()
+            return@flatMapLatest flowOf(emptyList())
         } else {
             stickerDao.getAllStickerWithTagsList(uuids.keys).map { list ->
                 list.sortedBy { uuids[it.sticker.uuid] }
@@ -72,7 +73,8 @@ class ImageSearchRepository(
         maxResultCount: Int,
         distance: Double = 500.0,
     ): Flow<Unit> = flow {
-        val nearestNeighborsResult = nearestNeighbors(base.toBitmap(), maxResultCount, distance)
+        val nearestNeighborsResult = if (StickerFormatChecker.isVideo(base)) mutableMapOf()
+        else nearestNeighbors(base.toBitmap(), maxResultCount, distance)
         if (baseUuid != null) {
             nearestNeighborsResult.remove(baseUuid)
         }
@@ -116,7 +118,8 @@ class ImageSearchRepository(
             .toSet()
         val unCachedEmbeddings = allStickers.subtract(cachedEmbeddings)
         stickerEmbeddingBox.put(
-            unCachedEmbeddings.map { unCachedUuid ->
+            unCachedEmbeddings.mapNotNull { unCachedUuid ->
+                if (StickerFormatChecker.isVideo(stickerUuidToUri(unCachedUuid), unCachedUuid)) return@mapNotNull null
                 val image = BitmapImageBuilder(appContext, stickerUuidToUri(unCachedUuid)).build()
                 StickerEmbedding(
                     uuid = unCachedUuid,

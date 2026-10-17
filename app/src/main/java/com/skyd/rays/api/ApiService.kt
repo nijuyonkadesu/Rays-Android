@@ -2,27 +2,30 @@ package com.skyd.rays.api
 
 import android.app.Service
 import android.content.Intent
+import android.os.Binder
 import android.os.IBinder
 import android.os.Parcelable
+import androidx.core.net.toUri
 import com.skyd.rays.api.strategy.SearchStickersStrategy
 import com.skyd.rays.appContext
+import com.skyd.rays.di.inject
 import com.skyd.rays.ext.dataStore
 import com.skyd.rays.ext.getOrDefault
-import com.skyd.rays.model.db.AppDatabase
+import com.skyd.rays.model.bean.StickerBean
+import com.skyd.rays.model.bean.TagBean
+import com.skyd.rays.model.db.dao.ApiGrantPackageDao
 import com.skyd.rays.model.preference.ApiGrantPreference
 import com.skyd.rays.model.respository.SearchRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import javax.inject.Inject
 
 class ApiService : Service() {
-    @Inject
-    lateinit var searchRepository: SearchRepository
-
-    @Inject
-    lateinit var json: Json
+    private val searchRepository: SearchRepository by inject()
+    private val apiGrantPackageDao: ApiGrantPackageDao by inject()
+    private val json: Json by inject()
 
     inner class ApiServiceBinder : IApiService.Stub() {
         override fun searchStickers(
@@ -30,41 +33,63 @@ class ApiService : Service() {
             keyword: String?,
             startIndex: Int,
             size: Int,
-        ) = runBlocking {
-            with(AppDatabase.getInstance(appContext)) {
-                if (requestPackage.isNullOrBlank() || !appContext.dataStore.getOrDefault(
-                        ApiGrantPreference
-                    ) || !apiGrantPackageDao().packageEnable(requestPackage)
-                ) {
-                    return@runBlocking null
+        ): String? = search(requestPackage, keyword, startIndex, size, includeMetadata = false)
+
+        override fun searchStickersPage(
+            requestPackage: String?,
+            keyword: String?,
+            startIndex: Int,
+            size: Int,
+        ): String? = search(requestPackage, keyword, startIndex, size, includeMetadata = true)
+
+        private fun search(
+            requestPackage: String?,
+            keyword: String?,
+            startIndex: Int,
+            size: Int,
+            includeMetadata: Boolean,
+        ): String? {
+            // Capture caller identity on the Binder thread, before changing coroutine context.
+            if (requestPackage.isNullOrBlank() || requestPackage !in
+                packageManager.getPackagesForUid(Binder.getCallingUid()).orEmpty()
+            ) return null
+
+            return runBlocking(Dispatchers.IO) {
+                if (!appContext.dataStore.getOrDefault(ApiGrantPreference) ||
+                    !apiGrantPackageDao.packageEnable(requestPackage)
+                ) return@runBlocking null
+
+                val limit = size.coerceIn(0, MAX_PAGE_SIZE)
+                val matches = if (startIndex < 0 || limit == 0) emptyList() else
+                    SearchStickersStrategy.execute(searchRepository, keyword, startIndex, limit + 1)
+                var data = matches.take(limit)
+                val metadata = if (includeMetadata) data.map {
+                    PageSticker(it.uri, it.sticker, it.tags, SearchStickersStrategy.mimeType(it))
+                } else emptyList()
+                var result: String
+                while (true) {
+                    result = if (includeMetadata) json.encodeToString(
+                        PageResult(
+                            startIndex = startIndex,
+                            size = data.size,
+                            nextIndex = if (matches.size > data.size && data.isNotEmpty())
+                                startIndex + data.size else null,
+                            data = metadata.take(data.size),
+                        )
+                    ) else json.encodeToString(ResultWrapper(startIndex, data.size, data))
+                    // Strings use UTF-16 in a Parcel. Leave room for concurrent Binder calls.
+                    if (result.length * 2 <= MAX_RESPONSE_BYTES) break
+                    check(data.size > 1) { "Sticker metadata exceeds the API response limit" }
+                    data = data.take(data.size / 2)
                 }
-            }
-
-            var dataList: List<ApiStickerWithTags> = if (startIndex < 0 || size <= 0) emptyList()
-            else SearchStickersStrategy.execute(searchRepository, keyword, requestPackage!!)
-            val safeStartIndex =
-                if (dataList.isEmpty()) 0 else startIndex.coerceIn(0, dataList.size - 1)
-            val safeEndIndex =
-                if (dataList.isEmpty()) 0 else (startIndex + size).coerceIn(1, dataList.size)
-            if (dataList.isNotEmpty()) {
-                dataList = dataList.subList(safeStartIndex, safeEndIndex)
-            }
-
-            // The Binder transaction buffer has a limited fixed size, currently 1MB
-            var jsonString: String
-            var dataListSize = dataList.size
-            do {
-                jsonString = json.encodeToString(
-                    ResultWrapper(
-                        data = if (dataList.isEmpty()) dataList
-                        else dataList.subList(0, dataListSize),
-                        startIndex = safeStartIndex,
-                        size = dataListSize,
+                // Grant only the final returned page, never the entire set of search matches.
+                data.forEach {
+                    grantUriPermission(
+                        requestPackage, it.uri.toUri(), Intent.FLAG_GRANT_READ_URI_PERMISSION
                     )
-                )
-                dataListSize /= 2
-            } while (jsonString.encodeToByteArray().size > 1024 * 1024)
-            jsonString
+                }
+                result
+            }
         }
     }
 
@@ -77,4 +102,25 @@ class ApiService : Service() {
         val size: Int,
         val data: List<ApiStickerWithTags>,
     ) : Parcelable
+
+    @Serializable
+    data class PageResult(
+        val startIndex: Int,
+        val size: Int,
+        val nextIndex: Int?,
+        val data: List<PageSticker>,
+    )
+
+    @Serializable
+    data class PageSticker(
+        val uri: String,
+        val sticker: StickerBean,
+        val tags: List<TagBean>,
+        val mimeType: String,
+    )
+
+    companion object {
+        const val MAX_PAGE_SIZE = 100
+        private const val MAX_RESPONSE_BYTES = 256 * 1024
+    }
 }

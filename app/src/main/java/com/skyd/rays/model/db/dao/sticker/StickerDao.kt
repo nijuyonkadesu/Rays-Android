@@ -50,6 +50,10 @@ interface StickerDao {
     fun getStickerWithTagsList(sql: SupportSQLiteQuery): Flow<List<StickerWithTags>>
 
     @Transaction
+    @RawQuery
+    suspend fun getStickerWithTagsPage(sql: SupportSQLiteQuery): List<StickerWithTags>
+
+    @Transaction
     @RawQuery(observedEntities = [StickerBean::class, TagBean::class])
     fun getStickerWithTagsPaging(sql: SupportSQLiteQuery): PagingSource<Int, StickerWithTags>
 

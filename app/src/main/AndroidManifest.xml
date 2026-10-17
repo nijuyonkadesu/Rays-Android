@@ -45,11 +45,12 @@
 
         <activity android:name=".ui.activity.CrashActivity" />
 
+        <!-- ApiService authenticates the Binder UID against the user-approved package list. -->
         <service
             android:name=".api.ApiService"
             android:enabled="true"
             android:exported="true"
-            android:permission="rays.permission.api">
+            tools:ignore="ExportedService">
             <intent-filter>
                 <action android:name="com.skyd.rays.api.ApiService" />
             </intent-filter>

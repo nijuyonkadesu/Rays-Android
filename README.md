@@ -55,6 +55,8 @@
 11. Support **dark color mode**
 12. ......
 
+External app integration: [API documentation](docs/external-api.md).
+
 ## 🤩 Screenshots
 
 ![ic_home_screen](image/en/ic_home_screen.jpg) ![ic_home_screen_search](image/en/ic_home_screen_search.jpg)

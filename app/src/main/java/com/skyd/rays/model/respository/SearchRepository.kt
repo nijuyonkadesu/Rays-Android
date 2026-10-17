@@ -52,6 +52,25 @@ class SearchRepository(
         stickerDao.getStickerWithTagsList(genSql(k = keyword)).first()
     }
 
+    suspend fun requestStickerWithTagsPage(
+        keyword: String,
+        startIndex: Int,
+        size: Int,
+    ): List<StickerWithTags> {
+        require(startIndex >= 0 && size > 0)
+        val search = genSql(keyword)
+        return stickerDao.getStickerWithTagsPage(
+            SimpleSQLiteQuery(
+                """
+                SELECT * FROM (${search.sql})
+                ORDER BY ${StickerBean.CREATE_TIME_COLUMN} DESC, ${StickerBean.UUID_COLUMN} ASC
+                LIMIT ? OFFSET ?
+                """.trimIndent(),
+                arrayOf(size, startIndex),
+            )
+        )
+    }
+
     fun requestStickerUuidList(keyword: String): Flow<List<String>> = flow {
         emit(stickerDao.getStickerUuidList(genSql(k = keyword, field = StickerBean.UUID_COLUMN)))
     }.flowOn(Dispatchers.IO)
